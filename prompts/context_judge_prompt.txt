@@ -1,4 +1,10 @@
-Determine if the following user message includes background context or is just a direct question.
-Output "context_provided" or "context_missing".
-
-Message: {input}
+Analyze the user's input and determine if it contains sufficient context to provide a good answer.
+        
+        User input: {input}
+        
+        Respond with either:
+        - "SUFFICIENT_CONTEXT" if the input contains enough background information or context
+        - "MISSING_CONTEXT" if the input lacks necessary context and would benefit from additional information
+        
+        Consider whether the question is specific enough and contains domain context, background details, or clear scope.
+    
