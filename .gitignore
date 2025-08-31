@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+#Project  files
+requirements_locked.txt
+
 # Distribution / packaging
 .Python
 build/
