@@ -17,13 +17,13 @@ from tools import (
 )
 
 # Load environment variables
-load_dotenv()
+load_dotenv('.env')
 
 def create_context_aware_agent():
     """Create and return a context-aware agent with all tools"""
     
     # Initialize the LLM
-    llm = Ollama(model='llama3')
+    llm = Ollama(model=os.getenv('MODEL_NAME'))
     
     # Build tools that require LLM
     context_judge_tool = build_context_judge_tool(llm)
