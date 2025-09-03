@@ -1,111 +1,236 @@
-# ui/ui.py
-import sys, os, time
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 import gradio as gr
-from agent.agent_runner import create_context_aware_agent
+import sys
+import os
+from datetime import datetime
 
-# --- Neater CSS ---
-custom_css = """
-.gradio-container { font-family:'Inter',sans-serif !important;background:#f9fafb !important;min-height:100vh !important;}
-.header {background:white;border-bottom:1px solid #e5e7eb;padding:0.75rem 1.5rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;}
-.header h1 {font-size:1.25rem;font-weight:600;color:#111827;margin:0;}
-.sidebar-toggle {background:#6366f1 !important;border-radius:8px !important;width:40px !important;height:40px !important;font-size:18px !important;color:white !important;display:flex;align-items:center;justify-content:center;cursor:pointer;}
-.sidebar-toggle:hover {background:#4f46e5 !important;}
-.chatbot-container {padding:1rem 1.5rem;background:#f9fafb;}
-.message {max-width:680px;margin:0 auto 1rem auto;display:flex;gap:0.75rem;}
-.message-avatar {width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1rem;}
-.user .message-avatar {background:#3b82f6;color:white;}
-.bot .message-avatar {background:#6366f1;color:white;}
-.message-content {padding:0.75rem 1rem;border-radius:12px;border:1px solid #e5e7eb;background:white;font-size:0.95rem;line-height:1.4;}
-.user .message-content {background:#3b82f6;color:white;border:none;}
-.input-area {border-top:1px solid #e5e7eb;background:white;padding:0.75rem 1.5rem;}
-.input-wrapper {max-width:680px;margin:0 auto;display:flex;gap:0.5rem;width:100%;}
-.input-box {flex:1;border:1px solid #d1d5db !important;border-radius:20px !important;padding:0.6rem 1rem !important;font-size:0.95rem !important;background:#f9fafb !important;}
-.input-box:focus {border-color:#6366f1 !important;background:white !important;box-shadow:0 0 0 2px rgba(99,102,241,0.15) !important;}
-.send-btn {background:#6366f1 !important;border-radius:50% !important;width:36px !important;height:36px !important;display:flex !important;align-items:center !important;justify-content:center !important;color:white !important;}
-.send-btn:hover {background:#4f46e5 !important;}
-.sidebar {position:fixed;right:-300px;top:60px;width:300px;height:calc(100vh - 60px);background:white;border-left:1px solid #e5e7eb;transition:right 0.3s ease;overflow-y:auto;box-shadow:-2px 0 6px rgba(0,0,0,0.05);z-index:200;}
-.sidebar.open {right:0;}
-.sidebar-content {padding:1rem;}
-.example-btn {width:100% !important;margin-bottom:0.5rem !important;padding:0.5rem 0.75rem !important;background:#f3f4f6 !important;border:1px solid #d1d5db !important;border-radius:8px !important;font-size:0.9rem !important;text-align:left;}
-.example-btn:hover {background:#e5e7eb !important;}
-.clear-btn {background:#ef4444 !important;border-radius:8px !important;padding:0.5rem !important;color:white !important;font-weight:500 !important;width:100%;}
-"""
+# Add the current directory to the path to import the agent
+sys.path.insert(0, os.path.abspath('.'))
 
-# --- Agent setup ---
+try:
+    from agent.agent_runner import create_context_aware_agent, run_agent_with_query
+except ImportError as e:
+    print(f"Import error: {e}")
+    print("Please ensure all dependencies are installed and the agent module is available.")
+
+# Global variable to store the agent executor
 agent_executor = None
+
 def initialize_agent():
+    """Initialize the agent executor"""
     global agent_executor
     try:
         agent_executor = create_context_aware_agent()
-        return "✅ Agent Ready"
+        return "✅ Agent initialized successfully!"
     except Exception as e:
-        return f"❌ Error: {str(e)}"
+        return f"❌ Error initializing agent: {str(e)}"
 
-def get_agent_response(message, history, show_thinking=False):
-    global agent_executor
-    if not message.strip(): return history, ""
-    if not agent_executor:
-        try: agent_executor = create_context_aware_agent()
-        except Exception as e:
-            history.append([message, f"❌ Failed to init agent: {str(e)}"]); return history, ""
-    history.append([message, None])
+def process_query(query, history):
+    """Process a user query and return the response"""
+    if not query.strip():
+        return history, ""
+    
+    if agent_executor is None:
+        error_msg = "❌ Agent not initialized. Please click 'Initialize Agent' first."
+        history.append([query, error_msg])
+        return history, ""
+    
     try:
-        if show_thinking: history[-1][1] = "🤔 Thinking..."
-        start = time.time()
-        response = agent_executor.invoke({"input": message})
-        elapsed = time.time()-start
-        bot_response = response.get("output") if isinstance(response,dict) else str(response)
-        bot_response += f"\n\n⏱️ {elapsed:.2f}s"
-        history[-1][1] = bot_response
+        # Add user message to history
+        history.append([query, "🤔 Processing..."])
+        
+        # Get response from agent
+        response = agent_executor.invoke({"input": query})
+        agent_response = response.get("output", "No response generated")
+        
+        # Update the last message with the actual response
+        history[-1][1] = agent_response
+        
     except Exception as e:
-        history[-1][1] = f"❌ Error: {e}"
+        error_msg = f"❌ Error processing query: {str(e)}"
+        history[-1][1] = error_msg
+    
     return history, ""
 
-def clear_chat(): return [], ""
+def clear_chat():
+    """Clear the chat history"""
+    return [], ""
 
-# --- UI ---
-def create_enhanced_ui():
-    init_status = initialize_agent()
-    with gr.Blocks(css=custom_css, title="🤖 AI Assistant") as ui:
-        sidebar_open = gr.State(False)
+def get_sample_queries():
+    """Return sample queries for testing"""
+    return [
+        "What is LangChain used for?",
+        "In the context of neural networks for computer vision, how do convolutional layers work?",
+        "Tell me about attention mechanisms",
+        "Explain the difference between supervised and unsupervised learning",
+        "What are the main components of a transformer architecture?"
+    ]
 
-        # Header
-        with gr.Row(elem_classes=["header"]):
-            gr.HTML("<h1>🤖 AI Assistant</h1>")
-            sidebar_toggle_btn = gr.Button("☰", elem_classes=["sidebar-toggle"])
+def load_sample_query(query):
+    """Load a sample query into the input box"""
+    return query
 
-        # Chat
-        chatbot = gr.Chatbot([], height=600, bubble_full_width=False, avatar_images=["👤","🤖"])
-        with gr.Row(elem_classes=["input-area"]):
-            with gr.Column(elem_classes=["input-wrapper"]):
-                msg_input = gr.Textbox(placeholder="Ask me anything...", lines=1, max_lines=5, container=False, elem_classes=["input-box"])
-                send_btn = gr.Button("➤", elem_classes=["send-btn"], scale=0)
+# Custom CSS for better styling
+custom_css = """
+.gradio-container {
+    max-width: 1200px !important;
+    margin: auto !important;
+}
 
-        # Sidebar overlay
-        with gr.Column(elem_classes=["sidebar"], visible=False) as sidebar:
-            with gr.Column(elem_classes=["sidebar-content"]):
-                gr.HTML(f"<h3>Status</h3><div>{init_status}</div>")
-                show_thinking = gr.Checkbox(label="Show thinking process", value=True)
-                gr.HTML("<h3>Examples</h3>")
-                for ex in ["What is machine learning?","How do neural networks work?","Explain transformers","Latest in AI research?"]:
-                    gr.Button(ex, elem_classes=["example-btn"]).click(fn=lambda x=ex: x, outputs=msg_input)
-                gr.Button("🗑️ Clear Chat", elem_classes=["clear-btn"]).click(fn=clear_chat, outputs=[chatbot,msg_input])
+.chat-message {
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 10px;
+}
 
-        # Events
-        def submit(message,history,thinking): return get_agent_response(message,history,thinking)
-        msg_input.submit(submit,[msg_input,chatbot,show_thinking],[chatbot,msg_input])
-        send_btn.click(submit,[msg_input,chatbot,show_thinking],[chatbot,msg_input])
+.user-message {
+    background-color: #e3f2fd;
+    margin-left: 20%;
+}
 
-        def toggle(opened): return gr.update(visible=not opened), not opened
-        sidebar_toggle_btn.click(toggle,[sidebar_open],[sidebar,sidebar_open])
+.bot-message {
+    background-color: #f5f5f5;
+    margin-right: 20%;
+}
 
-    return ui
+.title-container {
+    text-align: center;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
 
-def launch_ui(share=False, server_name="127.0.0.1", server_port=7860):
-    ui = create_enhanced_ui()
-    ui.queue().launch(share=share, server_name=server_name, server_port=server_port)
+.status-box {
+    padding: 10px;
+    border-radius: 5px;
+    margin: 10px 0;
+}
 
-if __name__=="__main__":
-    launch_ui(share=True, server_name="127.0.0.1", server_port=7860)
+.sample-queries {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    margin: 10px 0;
+}
+"""
+
+# Create the Gradio interface
+with gr.Blocks(css=custom_css, title="Context-Aware Agent UI") as demo:
+    # Title and description
+    with gr.Row():
+        gr.HTML("""
+        <div class="title-container">
+            <h1>🤖 Context-Aware Agent Interface</h1>
+            <p>An intelligent agent powered by LangChain with context-aware capabilities</p>
+        </div>
+        """)
+    
+    # Status section
+    with gr.Row():
+        with gr.Column(scale=2):
+            status_display = gr.Textbox(
+                label="🔧 Agent Status",
+                value="❌ Agent not initialized",
+                interactive=False,
+                elem_classes=["status-box"]
+            )
+        with gr.Column(scale=1):
+            init_btn = gr.Button(
+                "🚀 Initialize Agent",
+                variant="primary",
+                size="lg"
+            )
+    
+    # Main chat interface
+    with gr.Row():
+        with gr.Column(scale=3):
+            chatbot = gr.Chatbot(
+                label="💬 Chat with Agent",
+                height=500,
+                show_label=True,
+                elem_id="chatbot"
+            )
+            
+            with gr.Row():
+                query_input = gr.Textbox(
+                    label="Your Query",
+                    placeholder="Ask me anything about AI, machine learning, or any topic...",
+                    lines=2,
+                    scale=4
+                )
+                submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+        
+        # Sample queries sidebar
+        with gr.Column(scale=1):
+            gr.HTML("""
+            <div class="sample-queries">
+                <h3>💡 Sample Queries</h3>
+                <p>Click on any query below to try it out:</p>
+            </div>
+            """)
+            
+            sample_queries = get_sample_queries()
+            for i, query in enumerate(sample_queries):
+                sample_btn = gr.Button(
+                    f"📝 {query[:50]}{'...' if len(query) > 50 else ''}",
+                    variant="secondary",
+                    size="sm"
+                )
+                sample_btn.click(
+                    fn=lambda q=query: q,
+                    outputs=query_input
+                )
+    
+    # Footer
+    with gr.Row():
+        gr.HTML("""
+        <div style="text-align: center; padding: 20px; color: #666;">
+            <p>🔧 Built with Gradio | 🤖 Powered by LangChain | ⚡ Context-Aware Intelligence</p>
+            <p><small>Timestamp: """ + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + """</small></p>
+        </div>
+        """)
+    
+    # Event handlers
+    init_btn.click(
+        fn=initialize_agent,
+        outputs=status_display
+    )
+    
+    submit_btn.click(
+        fn=process_query,
+        inputs=[query_input, chatbot],
+        outputs=[chatbot, query_input]
+    )
+    
+    query_input.submit(
+        fn=process_query,
+        inputs=[query_input, chatbot],
+        outputs=[chatbot, query_input]
+    )
+    
+    clear_btn.click(
+        fn=clear_chat,
+        outputs=[chatbot, query_input]
+    )
+
+# Launch the interface
+if __name__ == "__main__":
+    print("🚀 Starting Context-Aware Agent UI...")
+    print("📝 Make sure you have:")
+    print("   - Ollama installed and running")
+    print("   - Required environment variables set in .env file")
+    print("   - All dependencies installed")
+    print("\n🌐 The interface will be available at the URL shown below:")
+    
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        share=True,
+        show_error=True,
+        debug=True
+    )
+
