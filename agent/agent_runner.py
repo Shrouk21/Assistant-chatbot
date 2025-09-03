@@ -52,7 +52,8 @@ def create_context_aware_agent():
         tools=tools,
         verbose=True,
         max_iterations=10,
-        handle_parsing_errors=True
+        handle_parsing_errors=True,
+        return_intermediate_steps=True
     )
     
     return agent_executor
